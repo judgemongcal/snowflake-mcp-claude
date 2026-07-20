@@ -1,0 +1,14 @@
+# Python
+.venv/
+.env
+__pycache__/
+*.pyc
+
+# Portable Node (do NOT commit ~100MB toolchain)
+.tools/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+node_modules/
+dist/

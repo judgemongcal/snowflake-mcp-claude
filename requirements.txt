@@ -1,0 +1,4 @@
+mcp>=1.2.0
+snowflake-connector-python>=3.12
+sqlglot>=25.0
+python-dotenv>=1.0
