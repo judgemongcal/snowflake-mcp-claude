@@ -4,6 +4,9 @@
 __pycache__/
 *.pyc
 
+# Claude Code — personal, machine-specific settings (keep .claude/agents/ tracked)
+.claude/settings.local.json
+
 # Portable Node (do NOT commit ~100MB toolchain)
 .tools/
 
