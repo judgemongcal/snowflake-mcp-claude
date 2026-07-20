@@ -319,6 +319,34 @@ provision or patch a VM.**
 5. **One warm instance:** sessions (and any per-user secrets) live in memory → pin
    min=max=1 or use sticky sessions, else autoscaling splits conversations / loses creds.
 
+#### Capping API spend to a fixed monthly budget (Pro-plan-style cost)
+
+The API bills per token, but you can **bound it to a flat monthly ceiling** so it behaves
+like a subscription — e.g. cap it at ~$20/month to mirror a Claude Pro plan's price. Do it
+at two layers:
+
+**Layer 1 — Anthropic Console (the hard ceiling; ~5 min, no code):**
+- Create a **dedicated workspace** for this app and generate its API key there, so limits
+  apply only to this app.
+- Set a **monthly spend limit** on that workspace (Console → Limits/Billing). When hit, the
+  API returns errors and the app stops spending — a true ceiling you can't overrun.
+- Set per-workspace **rate limits** (RPM / input-TPM / output-TPM) to bound burst cost.
+- *Caveat:* Console spend limits are **monthly** and workspace-wide, not daily or per-user.
+
+**Layer 2 — app side (daily + per-user granularity):**
+- Every turn, the Agent SDK's `ResultMessage` already carries `total_cost_usd` and `usage`
+  (token counts). `stream_turn` receives it today but only reads `duration_ms`.
+- Accumulate that cost into an in-memory tracker (daily reset; keyed globally and per
+  session/user) and short-circuit new turns past a configurable limit — the same
+  short-circuit pattern the scope classifier uses. Suggested `.env` knobs:
+  `DAILY_COST_LIMIT_USD`, `PER_USER_DAILY_MSGS`, plus a per-turn output cap.
+
+> ⚠️ **"Identical to Pro" means identical *price*, not identical *capacity*.** A $20/month
+> API cap fixes your cost at Pro's price, but $20 of tokens is a specific token budget — it
+> does **not** reproduce Pro's interactive usage allowance. Match the billing ceiling, not
+> the usage limits. Treat the **Console spend limit as the billing source of truth**;
+> `total_cost_usd` is a real-time gating signal, not an accounting figure.
+
 ### Bundle A in detail — per-user-local, onboarding screen
 
 Turn the `/api/health` gate into a **setup wizard**: detect the Claude Code login → prompt

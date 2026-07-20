@@ -98,8 +98,24 @@ OFF_TOPIC_REPLY = (
 )
 
 
-def make_options() -> ClaudeAgentOptions:
-    return ClaudeAgentOptions(
+# --- model & effort selection (chosen per-request from the UI) -----------------
+
+ALLOWED_MODELS = {"haiku", "sonnet", "opus"}
+ALLOWED_EFFORTS = {"low", "medium", "high", "xhigh", "max"}
+# Haiku 4.5 rejects the `effort` parameter; only pass it for models that accept it.
+EFFORT_CAPABLE_MODELS = {"sonnet", "opus"}
+DEFAULT_MODEL = "sonnet"
+DEFAULT_EFFORT = "high"
+
+
+def normalize_choice(model: object, effort: object) -> tuple[str, str]:
+    m = model if model in ALLOWED_MODELS else DEFAULT_MODEL
+    e = effort if effort in ALLOWED_EFFORTS else DEFAULT_EFFORT
+    return m, e  # type: ignore[return-value]
+
+
+def make_options(model: str = DEFAULT_MODEL, effort: str = DEFAULT_EFFORT) -> ClaudeAgentOptions:
+    opts = ClaudeAgentOptions(
         system_prompt=SYSTEM_PROMPT,
         # Disable the CLI "tool search" feature. Otherwise the MCP tools are
         # deferred behind the server-side ToolSearch tool: the model has to
@@ -125,8 +141,13 @@ def make_options() -> ClaudeAgentOptions:
         strict_mcp_config=True,   # only our snowflake server; ignore other MCP config
         setting_sources=[],        # self-contained; don't load project/user settings
         cwd=str(ROOT),
-        model="sonnet",
+        model=model,
     )
+    # Effort guides thinking depth on models that support it. Haiku 4.5 rejects the
+    # parameter, so we only attach it for effort-capable models.
+    if model in EFFORT_CAPABLE_MODELS:
+        opts.effort = effort  # type: ignore[assignment]
+    return opts
 
 
 def classifier_options() -> ClaudeAgentOptions:
@@ -196,8 +217,10 @@ scope = ScopeClassifier()
 # --- session management --------------------------------------------------------
 
 class ChatSession:
-    def __init__(self) -> None:
-        self.client = ClaudeSDKClient(make_options())
+    def __init__(self, model: str = DEFAULT_MODEL, effort: str = DEFAULT_EFFORT) -> None:
+        self.model = model
+        self.effort = effort
+        self.client = ClaudeSDKClient(make_options(model, effort))
         self.lock = asyncio.Lock()
         self.connected = False
 
@@ -205,6 +228,17 @@ class ChatSession:
         if not self.connected:
             await self.client.connect()
             self.connected = True
+
+    async def reconfigure(self, model: str, effort: str) -> None:
+        """Switch the model/effort for this session. The Agent SDK binds the model
+        at connect time, so a change means a fresh client — which starts a new
+        conversation context (switching models also invalidates the prompt cache)."""
+        if model == self.model and effort == self.effort:
+            return
+        await self.close()
+        self.model = model
+        self.effort = effort
+        self.client = ClaudeSDKClient(make_options(model, effort))
 
     async def close(self) -> None:
         if self.connected:
@@ -218,10 +252,10 @@ class ChatSession:
 sessions: dict[str, ChatSession] = {}
 
 
-def get_session(sid: str) -> ChatSession:
+def get_session(sid: str, model: str = DEFAULT_MODEL, effort: str = DEFAULT_EFFORT) -> ChatSession:
     s = sessions.get(sid)
     if s is None:
-        s = ChatSession()
+        s = ChatSession(model, effort)
         sessions[sid] = s
     return s
 
@@ -266,7 +300,9 @@ def summarize_tool_result(block: ToolResultBlock) -> tuple[bool, str]:
     return ok, (text[:120] + "…") if len(text) > 120 else (text or "ok")
 
 
-async def stream_turn(session: ChatSession, prompt: str) -> AsyncIterator[str]:
+async def stream_turn(
+    session: ChatSession, prompt: str, model: str, effort: str
+) -> AsyncIterator[str]:
     start = time.monotonic()
     # Pre-flight scope gate: reject off-topic prompts before spending an agent turn.
     if not await scope.allow(prompt):
@@ -275,6 +311,7 @@ async def stream_turn(session: ChatSession, prompt: str) -> AsyncIterator[str]:
         return
     async with session.lock:
         try:
+            await session.reconfigure(model, effort)
             await session.ensure()
             await session.client.query(prompt)
             async for msg in session.client.receive_response():
@@ -367,19 +404,20 @@ async def chat(request: Request) -> StreamingResponse:
     body = await request.json()
     prompt = (body.get("prompt") or "").strip()
     sid = body.get("session") or "default"
+    model, effort = normalize_choice(body.get("model"), body.get("effort"))
     if not prompt:
         async def empty() -> AsyncIterator[str]:
             yield sse({"type": "error", "message": "empty prompt"})
             yield sse({"type": "done", "duration_ms": 0})
         return StreamingResponse(empty(), media_type="text/event-stream")
 
-    session = get_session(sid)
+    session = get_session(sid, model, effort)
     headers = {
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
         "X-Accel-Buffering": "no",
     }
-    return StreamingResponse(stream_turn(session, prompt),
+    return StreamingResponse(stream_turn(session, prompt, model, effort),
                              media_type="text/event-stream", headers=headers)
 
 

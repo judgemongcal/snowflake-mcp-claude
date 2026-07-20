@@ -387,6 +387,21 @@ export default function App() {
   const [input, setInput] = useState("")
   const [streaming, setStreaming] = useState(false)
   const [dark, setDark] = useState(true)
+  // Model + effort are required before the first prompt; remembered across reloads.
+  const [model, setModel] = useState<string>(
+    () => localStorage.getItem("snowchat.model") ?? ""
+  )
+  const [effort, setEffort] = useState<string>(
+    () => localStorage.getItem("snowchat.effort") ?? ""
+  )
+  const ready = !!model && !!effort
+
+  useEffect(() => {
+    if (model) localStorage.setItem("snowchat.model", model)
+  }, [model])
+  useEffect(() => {
+    if (effort) localStorage.setItem("snowchat.effort", effort)
+  }, [effort])
 
   const session = useMemo(() => uid(), [])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -510,7 +525,7 @@ export default function App() {
   const send = useCallback(
     async (prompt: string) => {
       const text = prompt.trim()
-      if (!text || streaming) return
+      if (!text || streaming || !model || !effort) return
       setInput("")
       const assistantId = uid()
       setMessages((prev) => [
@@ -527,7 +542,7 @@ export default function App() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: text, session }),
+          body: JSON.stringify({ prompt: text, session, model, effort }),
           signal: controller.signal,
         })
         if (!res.ok || !res.body) {
@@ -576,7 +591,7 @@ export default function App() {
         abortRef.current = null
       }
     },
-    [applyEvent, session, streaming]
+    [applyEvent, session, streaming, model, effort]
   )
 
   const newChat = useCallback(async () => {
@@ -677,11 +692,17 @@ export default function App() {
                       key={s}
                       type="button"
                       onClick={() => void send(s)}
-                      className="rounded-lg border border-border px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                      disabled={!ready}
+                      className="rounded-lg border border-border px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {s}
                     </button>
                   ))}
+                  {!ready && (
+                    <p className="text-center text-xs text-amber-500">
+                      Choose a model and effort below to begin.
+                    </p>
+                  )}
                 </div>
               </div>
             ) : (
@@ -700,19 +721,58 @@ export default function App() {
 
         <div className="shrink-0 border-t border-border px-4 py-3">
           <div className="mx-auto w-full max-w-3xl">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                aria-label="Model"
+                className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus-visible:border-ring"
+              >
+                <option value="" disabled>
+                  Model…
+                </option>
+                <option value="haiku">Haiku · fast, cheap</option>
+                <option value="sonnet">Sonnet · balanced</option>
+                <option value="opus">Opus · most capable</option>
+              </select>
+              <select
+                value={effort}
+                onChange={(e) => setEffort(e.target.value)}
+                aria-label="Effort"
+                className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus-visible:border-ring"
+              >
+                <option value="" disabled>
+                  Effort…
+                </option>
+                <option value="low">Effort: low</option>
+                <option value="medium">Effort: medium</option>
+                <option value="high">Effort: high</option>
+                <option value="xhigh">Effort: xhigh</option>
+                <option value="max">Effort: max</option>
+              </select>
+              {model === "haiku" && effort && (
+                <span className="text-[11px] text-muted-foreground/60">
+                  effort has no effect on Haiku
+                </span>
+              )}
+            </div>
             <div className="relative flex items-end gap-2 rounded-2xl border border-border bg-card p-2 shadow-sm focus-within:border-ring">
               <Textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder="Ask about your Snowflake data…  (Enter to send, Shift+Enter for newline)"
+                placeholder={
+                  ready
+                    ? "Ask about your Snowflake data…  (Enter to send, Shift+Enter for newline)"
+                    : "Choose a model and effort above to begin…"
+                }
                 rows={1}
                 className="max-h-40 min-h-0 flex-1 resize-none border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:ring-0 dark:bg-transparent"
               />
               <Button
                 size="icon"
                 onClick={() => void send(input)}
-                disabled={!input.trim() || streaming}
+                disabled={!input.trim() || streaming || !ready}
                 aria-label="Send"
                 className="rounded-xl"
               >
@@ -724,7 +784,8 @@ export default function App() {
               </Button>
             </div>
             <p className="mt-1.5 text-center text-[11px] text-muted-foreground/60">
-              Read-only connection · results shown as tables
+              Read-only connection · results shown as tables · switching model or effort
+              starts a fresh conversation
             </p>
           </div>
         </div>
