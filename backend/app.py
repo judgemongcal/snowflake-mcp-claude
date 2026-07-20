@@ -71,6 +71,13 @@ explanations concise.
 def make_options() -> ClaudeAgentOptions:
     return ClaudeAgentOptions(
         system_prompt=SYSTEM_PROMPT,
+        # Disable the CLI "tool search" feature. Otherwise the MCP tools are
+        # deferred behind the server-side ToolSearch tool: the model has to
+        # discover them by name before it can call them, and a natural-language
+        # question ("what tables are in AIRBNB?") makes it search by keyword,
+        # find nothing, and wrongly report the Snowflake tools as unavailable.
+        # With tool search off, all 7 mcp__snowflake__* tools are offered directly.
+        env={"ENABLE_TOOL_SEARCH": "0"},
         mcp_servers={
             "snowflake": {
                 "type": "stdio",
