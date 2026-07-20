@@ -65,7 +65,31 @@ data, explain that it is read-only and what would need to change to enable it.
 - Always present query results as clean GitHub-flavored markdown tables. Keep \
 explanations concise.
 - Qualify object names as DATABASE.SCHEMA.OBJECT. Confirm before anything destructive.
-- The primary database is AIRBNB (schema DBT_SCHEMA, warehouse COMPUTE_WH)."""
+- The primary database is AIRBNB (schema DBT_SCHEMA, warehouse COMPUTE_WH).
+- SCOPE: you only help with this Snowflake account and its data (databases, schemas, \
+tables, SQL, results). If asked about anything unrelated — news, sports, general \
+knowledge, coding help unrelated to their data, etc. — politely decline in one sentence \
+and steer back to their Snowflake data. Do not answer the off-topic question."""
+
+
+# Pre-flight scope filter. A cheap, warm Haiku classifier decides whether a prompt is
+# about the user's Snowflake data before we spend a full (multi-second) agent turn on it.
+# This is the hard backstop; the SCOPE rule in SYSTEM_PROMPT above is defense-in-depth.
+CLASSIFIER_PROMPT = (
+    "You are a scope filter for a Snowflake data assistant. Decide if the user's message "
+    "belongs to that assistant. Reply with EXACTLY one word: ALLOW or BLOCK.\n"
+    "ALLOW = about their Snowflake account, databases/schemas/tables, SQL, data questions, "
+    "or normal conversational messages to the assistant (greetings, thanks, follow-ups like "
+    "'and the next 5?').\n"
+    "BLOCK = unrelated topics (news, sports, weather, general knowledge, coding help "
+    "unrelated to their data, etc.). Output only ALLOW or BLOCK."
+)
+
+OFF_TOPIC_REPLY = (
+    "I can only help with questions about your Snowflake account and its data — exploring "
+    "databases, schemas and tables, or writing read-only SQL. Ask me something about your "
+    "data and I'll dig in."
+)
 
 
 def make_options() -> ClaudeAgentOptions:
@@ -78,6 +102,11 @@ def make_options() -> ClaudeAgentOptions:
         # find nothing, and wrongly report the Snowflake tools as unavailable.
         # With tool search off, all 7 mcp__snowflake__* tools are offered directly.
         env={"ENABLE_TOOL_SEARCH": "0"},
+        # Lock the toolset down to Snowflake only. tools=[] disables every built-in
+        # Claude Code tool (Bash, web, file edit, …) that bypassPermissions would
+        # otherwise expose; the MCP tools are added on top and remain reachable
+        # (verified) because tool search is off, so they are offered directly.
+        tools=[],
         mcp_servers={
             "snowflake": {
                 "type": "stdio",
@@ -92,6 +121,70 @@ def make_options() -> ClaudeAgentOptions:
         cwd=str(ROOT),
         model="sonnet",
     )
+
+
+def classifier_options() -> ClaudeAgentOptions:
+    # Minimal, tool-less Haiku engine used only for the yes/no scope verdict.
+    return ClaudeAgentOptions(
+        system_prompt=CLASSIFIER_PROMPT,
+        tools=[],
+        permission_mode="bypassPermissions",
+        setting_sources=[],
+        cwd=str(ROOT),
+        model="claude-haiku-4-5-20251001",
+    )
+
+
+# --- scope filter --------------------------------------------------------------
+
+class ScopeClassifier:
+    """One warm, shared Haiku client that judges each prompt in ~1s. Fails OPEN:
+    if the classifier errors, the message is allowed (the SYSTEM_PROMPT scope rule
+    is still a backstop) so an infra hiccup never blocks a legitimate user."""
+
+    MAX_USES = 100  # recycle the client periodically to bound conversation growth
+
+    def __init__(self) -> None:
+        self.client: ClaudeSDKClient | None = None
+        self.lock = asyncio.Lock()
+        self.uses = 0
+
+    async def _ensure(self) -> None:
+        if self.client is None:
+            self.client = ClaudeSDKClient(classifier_options())
+            await self.client.connect()
+            self.uses = 0
+
+    async def _reset(self) -> None:
+        if self.client is not None:
+            try:
+                await self.client.disconnect()
+            except Exception:
+                pass
+        self.client = None
+
+    async def allow(self, prompt: str) -> bool:
+        async with self.lock:
+            try:
+                await self._ensure()
+                assert self.client is not None
+                await self.client.query(f"Classify ONLY this message: {prompt}")
+                verdict = ""
+                async for msg in self.client.receive_response():
+                    if isinstance(msg, AssistantMessage):
+                        for block in msg.content:
+                            if isinstance(block, TextBlock):
+                                verdict += block.text
+                self.uses += 1
+                if self.uses >= self.MAX_USES:
+                    await self._reset()
+                return "BLOCK" not in verdict.strip().upper()
+            except Exception:
+                await self._reset()
+                return True  # fail open
+
+
+scope = ScopeClassifier()
 
 
 # --- session management --------------------------------------------------------
@@ -169,6 +262,11 @@ def summarize_tool_result(block: ToolResultBlock) -> tuple[bool, str]:
 
 async def stream_turn(session: ChatSession, prompt: str) -> AsyncIterator[str]:
     start = time.monotonic()
+    # Pre-flight scope gate: reject off-topic prompts before spending an agent turn.
+    if not await scope.allow(prompt):
+        yield sse({"type": "text", "text": OFF_TOPIC_REPLY})
+        yield sse({"type": "done", "duration_ms": int((time.monotonic() - start) * 1000)})
+        return
     async with session.lock:
         try:
             await session.ensure()
