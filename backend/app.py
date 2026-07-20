@@ -76,13 +76,19 @@ and steer back to their Snowflake data. Do not answer the off-topic question."""
 # about the user's Snowflake data before we spend a full (multi-second) agent turn on it.
 # This is the hard backstop; the SCOPE rule in SYSTEM_PROMPT above is defense-in-depth.
 CLASSIFIER_PROMPT = (
-    "You are a scope filter for a Snowflake data assistant. Decide if the user's message "
-    "belongs to that assistant. Reply with EXACTLY one word: ALLOW or BLOCK.\n"
-    "ALLOW = about their Snowflake account, databases/schemas/tables, SQL, data questions, "
-    "or normal conversational messages to the assistant (greetings, thanks, follow-ups like "
-    "'and the next 5?').\n"
-    "BLOCK = unrelated topics (news, sports, weather, general knowledge, coding help "
-    "unrelated to their data, etc.). Output only ALLOW or BLOCK."
+    "You are a scope filter for a Snowflake data assistant. Reply with EXACTLY one word: "
+    "ALLOW or BLOCK.\n"
+    "Default to ALLOW. Only BLOCK a message that is CLEARLY about an unrelated topic with no "
+    "plausible connection to a data warehouse.\n"
+    "ALLOW = anything about the user's data or data platform: Snowflake, databases, schemas, "
+    "tables, views, columns, SQL/queries, warehouses, roles; analytics and data-engineering "
+    "concepts realized in the warehouse (dbt models, marts, staging models, sources, seeds, "
+    "snapshots, lineage, pipelines, metrics); exploring/among/counting/describing objects; "
+    "and normal conversational messages to the assistant (greetings, thanks, follow-ups like "
+    "'and the next 5?'). If a message plausibly refers to their data, ALLOW it.\n"
+    "BLOCK = only clearly off-topic subjects: news, sports, weather, politics, celebrities, "
+    "general trivia, personal/medical/legal advice, or coding help unrelated to querying "
+    "their data. When unsure, ALLOW. Output only ALLOW or BLOCK."
 )
 
 OFF_TOPIC_REPLY = (
