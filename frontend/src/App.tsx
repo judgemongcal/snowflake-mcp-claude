@@ -192,16 +192,16 @@ function ToolChip({ block }: { block: ToolBlockT }) {
       ? "text-destructive"
       : block.status === "ok"
         ? "text-emerald-500"
-        : "text-muted-foreground"
+        : "text-sky-600 dark:text-sky-400"
 
   return (
-    <div className="my-1.5 overflow-hidden rounded-lg border border-border bg-muted/40 text-sm">
+    <div className="my-1.5 overflow-hidden rounded-lg border border-sky-300/70 bg-sky-100/80 text-sm dark:border-sky-900/50 dark:bg-sky-950/30">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/60"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-sky-200/60 dark:hover:bg-sky-900/30"
       >
-        <Wrench className="size-3.5 shrink-0 text-muted-foreground" />
+        <Wrench className="size-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
         <span className="font-mono text-xs font-medium">
           {prettyToolName(block.name)}
         </span>
@@ -224,8 +224,8 @@ function ToolChip({ block }: { block: ToolBlockT }) {
         )}
       </button>
       {open && detail && (
-        <div className="border-t border-border/60 bg-background/40 px-3 py-2">
-          <pre className="overflow-x-auto font-mono text-xs whitespace-pre-wrap text-muted-foreground">
+        <div className="border-t border-sky-300/50 bg-white/50 px-3 py-2 dark:border-sky-900/50 dark:bg-background/40">
+          <pre className="overflow-x-auto font-mono text-xs whitespace-pre-wrap text-slate-600 dark:text-muted-foreground">
             {detail}
           </pre>
         </div>
@@ -239,7 +239,7 @@ function ToolChip({ block }: { block: ToolBlockT }) {
 function UserBubble({ text }: { text: string }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-4 py-2.5 text-primary-foreground whitespace-pre-wrap">
+      <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-4 py-2.5 whitespace-pre-wrap text-primary-foreground dark:bg-[#87cefa] dark:text-slate-900">
         {text}
       </div>
     </div>
@@ -277,7 +277,7 @@ function AssistantBubble({ message }: { message: Extract<Message, { role: "assis
         <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
           <Database className="size-4" />
         </div>
-        <div className="min-w-0 flex-1 pt-0.5">
+        <div className="min-w-0 flex-1 rounded-2xl rounded-bl-sm bg-[#f0f9ff] px-4 py-2.5 text-slate-900 dark:bg-muted dark:text-foreground">
           {empty && (
             <div className="flex items-center gap-1.5 py-1 text-muted-foreground">
               <LoaderCircle className="size-4 animate-spin" />
@@ -774,7 +774,7 @@ export default function App() {
                 onClick={() => void send(input)}
                 disabled={!input.trim() || streaming || !ready}
                 aria-label="Send"
-                className="rounded-xl"
+                className="rounded-xl bg-[#87cefa] text-slate-900 hover:bg-[#5ab4f0] dark:bg-[#87cefa] dark:text-slate-900 dark:hover:bg-[#5ab4f0]"
               >
                 {streaming ? (
                   <LoaderCircle className="size-4 animate-spin" />
