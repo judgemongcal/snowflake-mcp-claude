@@ -13,7 +13,14 @@
       "Bash(pipx --version)",
       "Bash(docker --version)",
       "PowerShell($uv = Get-Command uv -ErrorAction SilentlyContinue; if \\($uv\\) { \"uv: \" + $uv.Source } else { \"uv NOT on PATH\" }; $uvx = Get-Command uvx -ErrorAction SilentlyContinue; if \\($uvx\\) { \"uvx: \" + $uvx.Source } else { \"uvx NOT on PATH\" })",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(ls \"C:/Users/JMongcal/.claude/projects/C--dev-GitHub-snowflake-mcp-claude/memory/\")",
+      "Bash(grep -o '^[A-Z_]*' .env)",
+      "Bash(ls .venv/Scripts/python.exe)",
+      "Bash(find frontend/src -type f)",
+      "Bash(ls frontend/src/components/ui)",
+      "Bash(ls components.json frontend/components.json)",
+      "Bash(ls frontend/src/lib/utils.ts)"
     ]
   }
 }

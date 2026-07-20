@@ -1,4 +1,4 @@
-# Snowflake Chat — Session Handoff
+# SnowChat — Session Handoff
 
 _Last updated: 2026-07-20. This file is the source of truth for resuming. When you
 start a new Claude Code session in the moved folder, say: "Read HANDOFF.md and
@@ -27,22 +27,22 @@ with results as markdown tables.
 - Portable **Node v24.18.0** at `.tools/node` (no admin; moves with the folder).
 - `frontend/` scaffolded (Vite react-ts); deps installed: tailwind v4, `@tailwindcss/vite`, shadcn deps (cva, clsx, tailwind-merge, `@radix-ui/react-slot`, `@radix-ui/react-scroll-area`), `lucide-react`, `react-markdown`, `remark-gfm`, `tw-animate-css`.
 - `frontend/vite.config.ts` — Tailwind plugin + `@`→`src` alias + `/api`→`127.0.0.1:8000` proxy.
-- `backend/app.py` — written (endpoints `/api/health`, `/api/chat` SSE, `/api/reset`). **Not yet run/tested.**
+- `backend/app.py` — **run & tested end-to-end (2026-07-20).** Endpoints `/api/health`, `/api/chat` SSE, `/api/reset`. Health is all-green; a live turn ran Claude → MCP → Snowflake and streamed a correct markdown table. Backend deps already installed in `.venv` (fastapi, uvicorn, claude-agent-sdk, etc.).
+- **Frontend chat UI — built & verified (2026-07-20).** Replaced the Vite scaffold: `tsconfig*.json` (`@/*` paths + `ignoreDeprecations: "6.0"` for TS6), `src/index.css` (Tailwind v4 + shadcn neutral theme), `components.json`, `src/lib/utils.ts`, `src/components/ui/{button,textarea,card}.tsx`, `src/App.tsx` (full chat: health gate, SSE streaming, markdown tables, tool chips, dark default + toggle, New chat/reset). `index.html` title "Snowflake Chat" + `class="dark"`. `npm run build` passes. Removed leftover scaffold (`App.css`, `assets/`).
+- **Single-server prod mode works:** `app.py` mounts `frontend/dist` at `/`, so `http://127.0.0.1:8000` serves the built UI **and** the API together (verified 200 + correct title).
 
 ### ⏳ Next tasks (in order)
-1. **Build the frontend UI** — delegate to the `frontend-engineer` agent. Remaining files:
-   - `tsconfig.json` + `tsconfig.app.json`: add `"baseUrl": "."` and `"paths": {"@/*": ["./src/*"]}`.
-   - `src/index.css`: Tailwind v4 (`@import "tailwindcss";` + `@import "tw-animate-css";`) + shadcn **neutral** theme CSS variables (light + dark) + `@custom-variant dark`.
-   - `components.json` (shadcn, new-york, neutral, `css: src/index.css`, aliases `@/components`, `@/lib/utils`).
-   - `src/lib/utils.ts` (`cn`), `src/components/ui/{button,textarea,card}.tsx` (shadcn source).
-   - `src/App.tsx`: chat UI — calls `/api/health` (show setup screen if not ready), streams `/api/chat`, renders assistant markdown (tables via remark-gfm), shows tool-call chips, dark default + theme toggle.
-   - `index.html`: title "Snowflake Chat" + `class="dark"` on `<html>`.
-   - Verify with `npm run build`.
-2. **Run & test end-to-end:**
-   - Backend: `.venv\Scripts\python.exe backend\app.py` (port 8000).
-   - Frontend: `npm run dev` in `frontend/` (port 5173) → open http://localhost:5173.
-   - Try: "What tables are in AIRBNB?" → expect streamed answer + table. (Note: only `MY_FIRST_DBT_MODEL` exists so far.)
-3. **Nice-to-haves:** `backend/requirements.txt`; a `start.ps1` that launches backend + frontend together; wire the `snowflake-data-engineer` agent persona into the system prompt.
+1. **Nice-to-haves:** `backend/requirements.txt` (mirror the installed backend deps); a `start.ps1` that launches backend + Vite dev together; wire the `snowflake-data-engineer` agent persona into the system prompt.
+2. **UX polish (optional):** the Agent SDK surfaces a `ToolSearch` tool call at the start of some turns (deferred-tool discovery) — it renders as a generic tool chip. Consider hiding/relabeling non-`mcp__snowflake__*` tool chips in `App.tsx`.
+
+### How to run
+- **Prod (one server):** `.venv\Scripts\python.exe backend\app.py` → open `http://127.0.0.1:8000` (serves built `frontend/dist` + API).
+- **Dev (hot reload):** backend as above (port 8000) **and** `npm run dev` in `frontend/` (port 5173, proxies `/api` → 8000) → open `http://localhost:5173`.
+- Rebuild the frontend after changes: `npm run build` in `frontend/` (use the portable Node at `.tools\node`).
+
+### Data reality (as of 2026-07-20, was stale in earlier handoff)
+AIRBNB has grown past `MY_FIRST_DBT_MODEL`. Tables now present:
+`DBT_SCHEMA.MY_FIRST_DBT_MODEL` (2); `DEV`/`RAW`/`STAGING` each have `BOOKINGS` (5,000), `HOSTS` (200), `LISTINGS` (500); `DEV` also has `STG_HOSTS`/`STG_LISTINGS`. `PROD` and `TEST` schemas exist but are empty. (Row counts from `SHOW TABLES` metadata.)
 
 ### API contract (backend ↔ frontend)
 - `GET /api/health` → `{ ready, checks:[{name,ok,detail}], message }`

@@ -204,7 +204,7 @@ async def stream_turn(session: ChatSession, prompt: str) -> AsyncIterator[str]:
 
 # --- app -----------------------------------------------------------------------
 
-app = FastAPI(title="Snowflake Chat")
+app = FastAPI(title="SnowChat")
 
 
 @app.get("/api/health")
