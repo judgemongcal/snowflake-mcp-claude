@@ -36,15 +36,19 @@ flowchart TD
 **The path of a single question:**
 
 1. The React UI `POST`s `{prompt, session}` to `/api/chat` and opens an SSE stream.
-2. `backend/app.py` hands the prompt to the **Claude Agent SDK**, which drives the local
-   **Claude Code CLI** as the model engine (using your machine's existing login).
-3. Claude decides which Snowflake tool to call. The SDK launches **`server.py`** as a
+2. **Scope pre-flight:** `backend/app.py` first runs the prompt past a cheap, warm **Haiku
+   classifier** that returns `ALLOW`/`BLOCK` in ~1s. If it's off-topic (not about the user's
+   Snowflake data), the backend streams a canned reply and stops here — the expensive agent
+   turn never runs. On error the classifier **fails open** (allows). See decision E.
+3. On `ALLOW`, `backend/app.py` hands the prompt to the **Claude Agent SDK**, which drives
+   the local **Claude Code CLI** as the model engine (using your machine's existing login).
+4. Claude decides which Snowflake tool to call. The SDK launches **`server.py`** as a
    local **MCP** subprocess over stdio and forwards the tool call.
-4. `server.py` runs the SQL through its **permission gate** (read-only by default),
+5. `server.py` runs the SQL through its **permission gate** (read-only by default),
    executes it via `snowflake-connector-python`, and returns rows as JSON.
-5. The SDK streams every step back to the backend — thinking, `tool_use`, `tool_result`,
+6. The SDK streams every step back to the backend — thinking, `tool_use`, `tool_result`,
    and the final answer text — which the backend re-emits as **SSE events**.
-6. The UI renders the stream live: a "thinking" line, tool chips, then the markdown table.
+7. The UI renders the stream live: a "thinking" line, tool chips, then the markdown table.
 
 Everything runs **locally**. Your Snowflake credentials never leave `server.py`, and the
 question/answer traffic goes only to the Claude engine you already use for Claude Code.
