@@ -351,10 +351,40 @@ at two layers:
 
 Turn the `/api/health` gate into a **setup wizard**: detect the Claude Code login → prompt
 the user to run `claude` to log in if missing; collect Snowflake creds in a form → a new
-`POST /api/setup` validates + persists them + resets the session. Distribute via a
-one-command setup/start script. This dissolves networking, shared-credential, and
-access-control concerns entirely (it's all localhost), at the cost of each colleague
-installing Python + the app and having their own Claude Code login.
+`POST /api/setup` validates + persists them + resets the session. This dissolves networking,
+shared-credential, and access-control concerns entirely (it's all localhost), at the cost of
+each colleague installing Python + the app and having their own Claude Code login.
+
+#### Colleagues do NOT run `npm run dev`
+
+`npm run dev` is the **development** workflow (hot-reload while editing the frontend) — no
+colleague ever needs it. In **prod mode**, `app.py` serves the pre-built `frontend/dist` at
+`/`, so the frontend is built **once** and shipped as static files; at runtime a colleague
+just **starts the backend and opens `http://127.0.0.1:8000`** — no Vite, no npm, no Node at
+runtime at all. A local server does have to be running while in use, but that's *one* action
+(below), not the two-terminal dev dance.
+
+#### Distribution / launch options (least → most polished)
+
+| Option | Colleague experience | Effort to build |
+| --- | --- | --- |
+| **A. Run script** | Double-click `start.ps1` (activate venv → launch backend → auto-open browser); close the window to stop. Pair with a one-time `setup.ps1` (create venv, `pip install`, build `dist` once). | ~15 min |
+| **B. Auto-start service** | Backend runs on login in the background; the app is just "always there" at `localhost:8000`. | ~1 hr (Windows Task/Service) |
+| **C. Packaged `.exe`** (PyInstaller) | A single `SnowChat.exe` — **no** Python, venv, or Node needed. Double-click → browser opens. | ~half a day, and one build per OS |
+
+**The friction that actually matters is first-time setup, not launch.** Per machine:
+- **Python + venv + `pip install`** — the `.venv` isn't relocatable, so it's created per
+  machine. **Option C** bundles Python away entirely and removes this.
+- **Claude Code installed + logged in** — their own subscription; the prerequisite that makes
+  this route compliant (see §8's decisive rule).
+- **Snowflake creds** — handled by the onboarding wizard (or a hand-written `.env`).
+- **Node is not needed at runtime** — `dist` is platform-independent static files; a colleague
+  only needs Node if they rebuild the frontend, which they don't.
+
+**Recommendation:** if colleagues already use Claude Code (so they're technical enough),
+**Option A** is the sweet spot — a one-time `setup.ps1` + a double-clickable `start.ps1`, no
+dev commands, no per-use hassle. Go to **Option C** only if you want a truly zero-prerequisite
+hand-off (an `.exe` someone just runs).
 
 ### Decisions still to be made
 
@@ -364,6 +394,8 @@ installing Python + the app and having their own Claude Code login.
       (they pay).
 - [ ] **If B — host & access control:** which managed platform (Cloud Run / App Runner /
       Container Apps), and SSO vs proxy vs shared password.
+- [ ] **If A — launch method:** run script (double-click `start.ps1`) vs auto-start service
+      vs packaged `.exe`. *(Recommended: run script.)*
 - [ ] **Snowflake role:** create the scoped read-only role + warehouse the app connects as
       (shared, or per-user via onboarding).
 - [ ] **Speed (either bundle):** a quick throwaway test first (tunnel-from-this-machine for
